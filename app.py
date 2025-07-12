@@ -28,7 +28,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("Wildfire Response Prototype App")
+st.title("TankerWatch Prototype App")
+
 
 
 pdk.settings.mapbox_api_key = st.secrets["mapbox"]["api_key"]
