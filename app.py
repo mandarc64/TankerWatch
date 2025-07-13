@@ -22,6 +22,22 @@ st.markdown("""
     [data-testid="stSidebarHeader"] {
         height: 2rem;
     }
+            
+    /* Increase sidebar width */
+    .css-1d391kg {
+        width: 400px !important;
+    }
+    section[data-testid="stSidebar"] {
+        width: 400px !important;
+    }
+    section[data-testid="stSidebar"] > div {
+        width: 400px !important;
+    }
+    
+    /* Adjust main content to account for wider sidebar */
+    .main .block-container {
+        padding-left: 420px !important;
+    }
     
     /* Modern sidebar styling */
     .sidebar .sidebar-content {
@@ -339,15 +355,52 @@ valid_tankers["icon_data"] = [{
     "anchorY": 64
 }] * len(valid_tankers)
 
+# Add offset to tanker icons for multiple tankers at same airport
+valid_tankers['offset_index'] = valid_tankers.groupby('Airport').cumcount()
+valid_tankers['LAT_offset'] = valid_tankers['LAT'] + (valid_tankers['offset_index'] * 0.01)
+valid_tankers['LON_offset'] = valid_tankers['LON'] + (valid_tankers['offset_index'] * 0.01)
+
 tanker_layer = pdk.Layer(
     "IconLayer",
     data=valid_tankers,
     get_icon="icon_data",
-    get_position="[LON, LAT]",
+    get_position="[LON_offset, LAT_offset]",
     get_size=4,
     size_scale=10,
     pickable=True
 )
+
+# ADD TANKER LABELS with offset for multiple tankers at same airport
+tanker_label_data = valid_tankers.copy()
+tanker_label_data["label_text"] = tanker_label_data["Tanker Number"] + "\n" + tanker_label_data["Airport"]
+
+# Add offset for multiple tankers at same airport
+offset_factor = 0.01  # Adjust this to control spacing
+tanker_label_data['offset_index'] = tanker_label_data.groupby('Airport').cumcount()
+tanker_label_data['LAT_offset'] = tanker_label_data['LAT'] + (tanker_label_data['offset_index'] * offset_factor)
+tanker_label_data['LON_offset'] = tanker_label_data['LON'] + (tanker_label_data['offset_index'] * offset_factor)
+
+# Background text layer for tankers (black shadow)
+tanker_text_bg_layer = pdk.Layer("TextLayer", 
+                                 data=tanker_label_data,
+                                 get_position="[LON_offset, LAT_offset]", 
+                                 get_text="label_text",
+                                 get_size=14,
+                                 get_color=[0, 0, 0, 200],  # Black shadow
+                                 get_alignment_baseline="'top'",
+                                 get_text_anchor="'middle'",
+                                 billboard=True)
+
+# Main text layer for tankers (yellow text for visibility)
+tanker_text_layer = pdk.Layer("TextLayer", 
+                              data=tanker_label_data,
+                              get_position="[LON_offset, LAT_offset]", 
+                              get_text="label_text",
+                              get_size=14,
+                              get_color=[255, 255, 0, 255],  # Yellow text
+                              get_alignment_baseline="'top'",
+                              get_text_anchor="'middle'",
+                              billboard=True)
 
 # --------------------------
 # Map Layers Setup
@@ -393,6 +446,32 @@ airport_icon_data["icon_data"] = [{
 airport_layer = pdk.Layer("IconLayer", data=airport_icon_data, get_icon="icon_data",
                           get_size=4, size_scale=10, get_position="[LON, LAT]", pickable=True)
 
+# ADD AIRPORT LABELS for closest bases
+airport_label_data = closest_bases.copy()
+airport_label_data["label_text"] = airport_label_data["ICAO"] + "\n" + airport_label_data["Name"]
+
+# Background text layer for airports (black shadow)
+airport_text_bg_layer = pdk.Layer("TextLayer", 
+                                  data=airport_label_data,
+                                  get_position="[LON, LAT]", 
+                                  get_text="label_text",
+                                  get_size=16,
+                                  get_color=[0, 0, 0, 200],  # Black shadow
+                                  get_alignment_baseline="'top'",
+                                  get_text_anchor="'middle'",
+                                  billboard=True)
+
+# Main text layer for airports (black text)
+airport_text_layer = pdk.Layer("TextLayer", 
+                               data=airport_label_data,
+                               get_position="[LON, LAT]", 
+                               get_text="label_text",
+                               get_size=16,
+                               get_color=[0, 0, 0, 255],  # Black text
+                               get_alignment_baseline="'top'",
+                               get_text_anchor="'middle'",
+                               billboard=True)
+
 label_data = pd.DataFrame([{
     "lat": (lat + row["LAT"]) / 2,
     "lon": (lon + row["LON"]) / 2,
@@ -432,7 +511,18 @@ with st.spinner("🗺️ Loading interactive map..."):
             pitch=45,
             bearing=0
         ),
-        layers=[line_layer, fire_layer, airport_layer, text_background_layer, text_layer, tanker_layer],
+        layers=[
+            line_layer, 
+            fire_layer, 
+            airport_layer, 
+            airport_text_bg_layer,  # NEW
+            airport_text_layer,     # NEW
+            tanker_layer,
+            tanker_text_bg_layer,   # NEW
+            tanker_text_layer,      # NEW
+            text_background_layer,  # Distance labels
+            text_layer              # Distance labels
+        ],
         api_keys={"mapbox": pdk.settings.mapbox_api_key},
         height=600
     ))
