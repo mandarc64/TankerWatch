@@ -175,7 +175,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<h1 class="main-title">🔥 TankerWatch Wildfire Response System</h1>', unsafe_allow_html=True)
-
+map_placeholder = st.container()
 pdk.settings.mapbox_api_key = st.secrets["mapbox"]["api_key"]
 
 # --------------------------
@@ -321,27 +321,90 @@ closest_bases = airport_df.nsmallest(3, "Distance to Fire (nm)").copy()
 closest_bases["Distance to Fire (nm)"] = closest_bases["Distance to Fire (nm)"].round(1)
 
 # --------------------------
+# Modern Editable Tanker Table + Distances
+# --------------------------
+st.markdown("### ✏️ Air Tankers / Scoopers Location Management")
+st.markdown("""
+<div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); 
+            padding: 15px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #2196F3;">
+    <div style="display: flex; align-items: center;">
+        <span style="font-size: 24px; margin-right: 10px;">💡</span>
+        <div>
+            <strong>Interactive Table:</strong> Edit aircraft locations, add new tankers, or remove existing ones.<br>
+            <small>Changes will automatically update distances and map markers.</small>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+with st.spinner("📊 Loading tanker data..."):
+    editable_tankers = st.data_editor(
+        tanker_df, 
+        use_container_width=True, 
+        num_rows="dynamic", 
+        key="tanker_editor",
+        hide_index=True,
+        column_config={
+            "Tanker Number": st.column_config.TextColumn(
+                "🚁 Tanker Number",
+                help="Aircraft tail number or identifier",
+                width="medium"
+            ),
+            "Aircraft Type": st.column_config.TextColumn(
+                "✈️ Aircraft Type",
+                help="Type of aircraft (e.g., DC-10, C-130)",
+                width="medium"
+            ),
+            "Airport": st.column_config.TextColumn(
+                "📍 Airport Code",
+                help="ICAO airport code where aircraft is located",
+                width="medium"
+            )
+        }
+    )
+    
+    # Safely convert to DataFrame
+    if not isinstance(editable_tankers, pd.DataFrame):
+        if isinstance(editable_tankers, dict):
+            # Handle the dictionary properly
+            if 'edited_rows' in editable_tankers:
+                # Use the original data and apply edits
+                editable_tankers = tanker_df.copy()
+            else:
+                # Convert dict to DataFrame more safely
+                try:
+                    editable_tankers = pd.DataFrame.from_dict(editable_tankers, orient='index').T
+                except:
+                    editable_tankers = tanker_df.copy()
+        else:
+            editable_tankers = tanker_df.copy()
+    
+    # Now safely apply the distance calculation
+    editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(compute_tanker_distance, axis=1)
+st.markdown("---")
+
+# --------------------------
 # Prepare Tanker Data for Map
 # --------------------------
-editable_tankers = st.session_state.get("tanker_editor", tanker_df.copy())
+# editable_tankers = st.session_state.get("tanker_editor", tanker_df.copy())
 
-# Safely convert to DataFrame
-if not isinstance(editable_tankers, pd.DataFrame):
-    if isinstance(editable_tankers, dict):
-        # Handle the dictionary properly
-        if 'edited_rows' in editable_tankers:
-            # Use the original data and apply edits
-            editable_tankers = tanker_df.copy()
-        else:
-            # Convert dict to DataFrame more safely
-            try:
-                editable_tankers = pd.DataFrame.from_dict(editable_tankers, orient='index').T
-            except:
-                editable_tankers = tanker_df.copy()
-    else:
-        editable_tankers = tanker_df.copy()
+# # Safely convert to DataFrame
+# if not isinstance(editable_tankers, pd.DataFrame):
+#     if isinstance(editable_tankers, dict):
+#         # Handle the dictionary properly
+#         if 'edited_rows' in editable_tankers:
+#             # Use the original data and apply edits
+#             editable_tankers = tanker_df.copy()
+#         else:
+#             # Convert dict to DataFrame more safely
+#             try:
+#                 editable_tankers = pd.DataFrame.from_dict(editable_tankers, orient='index').T
+#             except:
+#                 editable_tankers = tanker_df.copy()
+#     else:
+#         editable_tankers = tanker_df.copy()
 
-editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(compute_tanker_distance, axis=1)
+# editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(compute_tanker_distance, axis=1)
 # Plot Air Tankers on the Map
 valid_tankers = editable_tankers.copy()
 valid_tankers["coords"] = valid_tankers["Airport"].apply(get_airport_coords)
@@ -495,38 +558,57 @@ text_layer = pdk.Layer("TextLayer", data=label_data,
                        get_text_anchor="'middle'",
                        billboard=True)
 
+
+
+
+
+
 # --------------------------
 # MODERN MAP VIEW - NOW AT THE TOP!
 # --------------------------
-st.markdown("### 🗺️ Real-Time Wildfire Response Map")
+with map_placeholder:
+    st.markdown("### 🗺️ Real-Time Wildfire Response Map")
+    with st.spinner("🗺️ Loading interactive map..."):
+        st.markdown('<div class="map-container">', unsafe_allow_html=True)
+        st.pydeck_chart(pdk.Deck(
+            map_style="mapbox://styles/mapbox/satellite-streets-v11",
+            initial_view_state=pdk.ViewState(
+                latitude=lat, 
+                longitude=lon, 
+                zoom=7,
+                pitch=45,
+                bearing=0
+            ),
+            layers=[
+                line_layer, 
+                fire_layer, 
+                airport_layer, 
+                airport_text_bg_layer,  # NEW
+                airport_text_layer,     # NEW
+                tanker_layer,
+                tanker_text_bg_layer,   # NEW
+                tanker_text_layer,      # NEW
+                text_background_layer,  # Distance labels
+                text_layer              # Distance labels
+            ],
+            api_keys={"mapbox": pdk.settings.mapbox_api_key},
+            height=600
+        ))
+        st.markdown('</div>', unsafe_allow_html=True)
 
-with st.spinner("🗺️ Loading interactive map..."):
-    st.markdown('<div class="map-container">', unsafe_allow_html=True)
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/satellite-streets-v11",
-        initial_view_state=pdk.ViewState(
-            latitude=lat, 
-            longitude=lon, 
-            zoom=7,
-            pitch=45,
-            bearing=0
-        ),
-        layers=[
-            line_layer, 
-            fire_layer, 
-            airport_layer, 
-            airport_text_bg_layer,  # NEW
-            airport_text_layer,     # NEW
-            tanker_layer,
-            tanker_text_bg_layer,   # NEW
-            tanker_text_layer,      # NEW
-            text_background_layer,  # Distance labels
-            text_layer              # Distance labels
-        ],
-        api_keys={"mapbox": pdk.settings.mapbox_api_key},
-        height=600
-    ))
-    st.markdown('</div>', unsafe_allow_html=True)
+    # --------------------------
+    # Closest Bases Summary
+    # --------------------------
+    st.markdown("### 🏆 3 Closest Air Tanker Bases to Wildfire")
+    st.markdown("*Automatically calculated based on current fire location*")
+
+    # Enhanced dataframe display
+    st.dataframe(
+        closest_bases[["Name", "ICAO", "LAT", "LON", "Elevation", "# of Runways", "Distance to Fire (nm)"]],
+        use_container_width=True,
+        hide_index=True
+    )
+
 
 # Map controls info
 st.markdown("""
@@ -534,82 +616,6 @@ st.markdown("""
     <small>🖱️ <strong>Map Controls:</strong> Click and drag to pan • Scroll to zoom • Hold Shift + drag to rotate</small>
 </div>
 """, unsafe_allow_html=True)
-
-# --------------------------
-# Closest Bases Summary
-# --------------------------
-st.markdown("### 🏆 3 Closest Air Tanker Bases to Wildfire")
-st.markdown("*Automatically calculated based on current fire location*")
-
-# Enhanced dataframe display
-st.dataframe(
-    closest_bases[["Name", "ICAO", "LAT", "LON", "Elevation", "# of Runways", "Distance to Fire (nm)"]],
-    use_container_width=True,
-    hide_index=True
-)
-
-# --------------------------
-# Modern Editable Tanker Table + Distances
-# --------------------------
-st.markdown("### ✏️ Air Tankers / Scoopers Location Management")
-st.markdown("""
-<div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); 
-            padding: 15px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #2196F3;">
-    <div style="display: flex; align-items: center;">
-        <span style="font-size: 24px; margin-right: 10px;">💡</span>
-        <div>
-            <strong>Interactive Table:</strong> Edit aircraft locations, add new tankers, or remove existing ones.<br>
-            <small>Changes will automatically update distances and map markers.</small>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-with st.spinner("📊 Loading tanker data..."):
-    editable_tankers = st.data_editor(
-        tanker_df, 
-        use_container_width=True, 
-        num_rows="dynamic", 
-        key="tanker_editor",
-        hide_index=True,
-        column_config={
-            "Tanker Number": st.column_config.TextColumn(
-                "🚁 Tanker Number",
-                help="Aircraft tail number or identifier",
-                width="medium"
-            ),
-            "Aircraft Type": st.column_config.TextColumn(
-                "✈️ Aircraft Type",
-                help="Type of aircraft (e.g., DC-10, C-130)",
-                width="medium"
-            ),
-            "Airport": st.column_config.TextColumn(
-                "📍 Airport Code",
-                help="ICAO airport code where aircraft is located",
-                width="medium"
-            )
-        }
-    )
-    
-    # Safely convert to DataFrame
-    if not isinstance(editable_tankers, pd.DataFrame):
-        if isinstance(editable_tankers, dict):
-            # Handle the dictionary properly
-            if 'edited_rows' in editable_tankers:
-                # Use the original data and apply edits
-                editable_tankers = tanker_df.copy()
-            else:
-                # Convert dict to DataFrame more safely
-                try:
-                    editable_tankers = pd.DataFrame.from_dict(editable_tankers, orient='index').T
-                except:
-                    editable_tankers = tanker_df.copy()
-        else:
-            editable_tankers = tanker_df.copy()
-    
-    # Now safely apply the distance calculation
-    editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(compute_tanker_distance, axis=1)
-st.markdown("---")
 
 st.markdown("### 📊 Air Tankers with Calculated Distances")
 st.markdown("*Real-time distance calculations from current fire location*")
