@@ -220,7 +220,7 @@ with st.sidebar:
     current_lon = st.session_state.get("wildfire_lon", -120.0)
     
     st.markdown(f"""
-    <div style="font-size: 20px;">
+    <div style="font-size: 18px;">
         <strong>Current Fire Location:</strong><br>
         - 📍 Lat: <code>{current_lat:.4f}</code><br>
         - 📍 Lon: <code>{current_lon:.4f}</code>
