@@ -189,11 +189,13 @@ def encode_image_to_base64(file_path):
 # --------------------------
 @st.cache_data
 def load_airport_data():
+    """Load and process airport data from CSV file"""
     df = pd.read_csv("airports.csv")
     return df[["Name", "ICAO", "LAT", "LON", "Elevation", "# of Runways"]].dropna(subset=["LAT", "LON", "ICAO"])
 
 @st.cache_data
 def load_tanker_data():
+    """Load and process tanker data from Excel file"""
     df = pd.read_excel("eod_loc_July7.xlsx", engine="openpyxl")
     df.rename(columns={"TailNumber": "Tanker Number", "Type": "Aircraft Type"}, inplace=True)
     df.columns = df.columns.map(str)
@@ -203,6 +205,7 @@ def load_tanker_data():
             break
     return df[["Tanker Number", "Aircraft Type", "Airport"]]
 
+# Load data
 airport_df = load_airport_data()
 tanker_df = load_tanker_data()
 
