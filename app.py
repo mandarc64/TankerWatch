@@ -220,10 +220,12 @@ with st.sidebar:
     current_lon = st.session_state.get("wildfire_lon", -120.0)
     
     st.markdown(f"""
-    **Current Fire Location:**
-    - 📍 Lat: `{current_lat:.4f}`
-    - 📍 Lon: `{current_lon:.4f}`
-    """)
+    <div style="font-size: 20px;">
+        <strong>Current Fire Location:</strong><br>
+        - 📍 Lat: <code>{current_lat:.4f}</code><br>
+        - 📍 Lon: <code>{current_lon:.4f}</code>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     st.markdown("### 🔧 Update Coordinates")
@@ -255,16 +257,16 @@ with st.sidebar:
     st.markdown("""
     <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px; margin: 10px 0;">
         <div style="margin: 8px 0;">
-            <span style="font-size: 22px;">🔥</span> <small>Wildfire Location</small>
+            <span style="font-size: 24px;">🔥</span> <small>Wildfire Location</small>
         </div>
         <div style="margin: 8px 0;">
-            <span style="font-size: 22px;">📍</span> <small>Air Tanker Bases</small>
+            <span style="font-size: 24px;">📍</span> <small>Air Tanker Bases</small>
         </div>
         <div style="margin: 8px 0;">
-            <span style="font-size: 22px;">✈️</span> <small>Air Tankers</small>
+            <span style="font-size: 24px;">✈️</span> <small>Air Tankers</small>
         </div>
         <div style="margin: 8px 0;">
-            <span style="font-size: 22px;">📏</span> <small>Distance Lines</small>
+            <span style="font-size: 24px;">📏</span> <small>Distance Lines</small>
         </div>
     </div>
     """, unsafe_allow_html=True)
