@@ -4,6 +4,7 @@ from geopy.distance import geodesic
 import pydeck as pdk
 import base64
 import datetime
+import openpyxl
 
 # --------------------------
 # Configuration & API Key
@@ -11,7 +12,8 @@ import datetime
 st.set_page_config(page_title="Wildfire …", layout="wide")
 
 # Inject CSS for modern styling
-st.markdown("""
+st.markdown(
+    """
     <style>
     div[class^="block-container"] {
         padding-top: 0rem !important;
@@ -172,11 +174,17 @@ st.markdown("""
         display: none !important;
     }
     </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-st.markdown('<h1 class="main-title">🔥 TankerWatch Wildfire Response System</h1>', unsafe_allow_html=True)
+st.markdown(
+    '<h1 class="main-title">🔥 TankerWatch Wildfire Response System</h1>',
+    unsafe_allow_html=True,
+)
 map_placeholder = st.container()
 pdk.settings.mapbox_api_key = st.secrets["mapbox"]["api_key"]
+
 
 # --------------------------
 # Utility Functions
@@ -184,11 +192,13 @@ pdk.settings.mapbox_api_key = st.secrets["mapbox"]["api_key"]
 def distance_nm(coord1, coord2):
     return geodesic(coord1, coord2).nautical
 
+
 def get_airport_coords(icao_code):
     match = airport_df[airport_df["ICAO"] == icao_code]
     if not match.empty:
         return (match.iloc[0]["LAT"], match.iloc[0]["LON"])
     return None
+
 
 def compute_tanker_distance(row):
     coords = get_airport_coords(row["Airport"])
@@ -196,30 +206,63 @@ def compute_tanker_distance(row):
         return distance_nm(wildfire_location, coords)
     return None
 
+
 def encode_image_to_base64(file_path):
     with open(file_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+
 
 # --------------------------
 # Load Data
 # --------------------------
 @st.cache_data
 def load_airport_data():
-    """Load and process airport data from CSV file"""
-    df = pd.read_csv("airports.csv")
-    return df[["Name", "ICAO", "LAT", "LON", "Elevation", "# of Runways"]].dropna(subset=["LAT", "LON", "ICAO"])
+    """Load and process airport data from Excel file"""
+    df = pd.read_excel("AirTankerBases_2025_with_ICAO_codes.xlsx", engine="openpyxl")
+    # Rename columns to match the expected format
+    df.rename(
+        columns={
+            "Airport": "Name",
+            "ICAO": "ICAO",
+            "latitude_deg": "LAT",
+            "longitude_deg": "LON",
+        },
+        inplace=True,
+    )
+
+    # Add missing columns with default values
+    df["Elevation"] = "N/A"  # or you can leave this empty if not needed
+    df["# of Runways"] = "N/A"  # or you can leave this empty if not needed
+
+    return df[
+        [
+            "Name",
+            "ICAO",
+            "LAT",
+            "LON",
+            "Elevation",
+            "# of Runways",
+            "Region",
+            "County",
+            "State",
+        ]
+    ].dropna(subset=["LAT", "LON", "ICAO"])
+
 
 @st.cache_data
 def load_tanker_data():
     """Load and process tanker data from Excel file"""
     df = pd.read_excel("eod_loc_July7.xlsx", engine="openpyxl")
-    df.rename(columns={"TailNumber": "Tanker Number", "Type": "Aircraft Type"}, inplace=True)
+    df.rename(
+        columns={"TailNumber": "Tanker Number", "Type": "Aircraft Type"}, inplace=True
+    )
     df.columns = df.columns.map(str)
     for col in df.columns:
         if "2025" in col or "Jul" in col:
             df.rename(columns={col: "Airport"}, inplace=True)
             break
     return df[["Tanker Number", "Aircraft Type", "Airport"]]
+
 
 # Load data
 airport_df = load_airport_data()
@@ -230,34 +273,41 @@ tanker_df = load_tanker_data()
 with st.sidebar:
     st.markdown("### 🎯 Wildfire Location Control")
     st.markdown("---")
-    
+
     # Current location display
     current_lat = st.session_state.get("wildfire_lat", 37.0)
     current_lon = st.session_state.get("wildfire_lon", -120.0)
-    
-    st.markdown(f"""
+
+    st.markdown(
+        f"""
     <div style="font-size: 18px;">
         <strong>Current Fire Location:</strong><br>
         - 📍 Lat: <code>{current_lat:.4f}</code><br>
         - 📍 Lon: <code>{current_lon:.4f}</code>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown("---")
     st.markdown("### 🔧 Update Coordinates")
-    
+
     col1, col2 = st.columns(2)
     with col1:
-        input_lat = st.number_input("🌐 Latitude", value=current_lat, format="%.6f", step=None, key="lat_input")
+        input_lat = st.number_input(
+            "🌐 Latitude", value=current_lat, format="%.6f", step=None, key="lat_input"
+        )
     with col2:
-        input_lon = st.number_input("🌐 Longitude", value=current_lon, format="%.6f", step=None, key="lon_input")
+        input_lon = st.number_input(
+            "🌐 Longitude", value=current_lon, format="%.6f", step=None, key="lon_input"
+        )
 
     # Auto-update when input values change
     if input_lat != current_lat or input_lon != current_lon:
         st.session_state["wildfire_lat"] = input_lat
         st.session_state["wildfire_lon"] = input_lon
         st.rerun()
-    
+
     # Manual update button (now optional)
     if st.button("🔄 Update Fire Location", use_container_width=True):
         with st.spinner("🔄 Updating fire location..."):
@@ -270,7 +320,8 @@ with st.sidebar:
 
     # Add legend here
     st.markdown("### 🗺️ Map Legend")
-    st.markdown("""
+    st.markdown(
+        """
     <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px; margin: 10px 0;">
         <div style="margin: 8px 0;">
             <span style="font-size: 24px;">🔥</span> <small>Wildfire Location</small>
@@ -285,19 +336,23 @@ with st.sidebar:
             <span style="font-size: 24px;">📏</span> <small>Distance Lines</small>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
-    
+
     # Quick location presets
     st.markdown("### 🗺️ Quick Locations")
     location_presets = {
         "🏔️ Northern California": (39.7392, -121.8375),
         "🌲 Oregon": (44.0521, -121.3153),
         "🏜️ Southern California": (34.0522, -118.2437),
-        "🌵 Arizona": (34.0489, -111.0937)
+        "🌵 Arizona": (34.0489, -111.0937),
+        "🌲 Washington": (47.6062, -122.3321),
+        "⛰️ Colorado": (39.5501, -105.7821),
     }
-    
+
     for name, (lat, lon) in location_presets.items():
         if st.button(name, use_container_width=True):
             with st.spinner(f"🌍 Setting location to {name}..."):
@@ -314,8 +369,7 @@ wildfire_location = (lat, lon)
 # Nearest Bases Calculation
 # --------------------------
 airport_df["Distance to Fire (nm)"] = airport_df.apply(
-    lambda row: distance_nm(wildfire_location, (row["LAT"], row["LON"])),
-    axis=1
+    lambda row: distance_nm(wildfire_location, (row["LAT"], row["LON"])), axis=1
 )
 closest_bases = airport_df.nsmallest(3, "Distance to Fire (nm)").copy()
 closest_bases["Distance to Fire (nm)"] = closest_bases["Distance to Fire (nm)"].round(1)
@@ -324,7 +378,8 @@ closest_bases["Distance to Fire (nm)"] = closest_bases["Distance to Fire (nm)"].
 # Modern Editable Tanker Table + Distances
 # --------------------------
 st.markdown("### ✏️ Air Tankers / Scoopers Location Management")
-st.markdown("""
+st.markdown(
+    """
 <div style="background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); 
             padding: 15px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #2196F3;">
     <div style="display: flex; align-items: center;">
@@ -335,52 +390,58 @@ st.markdown("""
         </div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 with st.spinner("📊 Loading tanker data..."):
     editable_tankers = st.data_editor(
-        tanker_df, 
-        use_container_width=True, 
-        num_rows="dynamic", 
+        tanker_df,
+        use_container_width=True,
+        num_rows="dynamic",
         key="tanker_editor",
         hide_index=True,
         column_config={
             "Tanker Number": st.column_config.TextColumn(
                 "🚁 Tanker Number",
                 help="Aircraft tail number or identifier",
-                width="medium"
+                width="medium",
             ),
             "Aircraft Type": st.column_config.TextColumn(
                 "✈️ Aircraft Type",
                 help="Type of aircraft (e.g., DC-10, C-130)",
-                width="medium"
+                width="medium",
             ),
             "Airport": st.column_config.TextColumn(
                 "📍 Airport Code",
                 help="ICAO airport code where aircraft is located",
-                width="medium"
-            )
-        }
+                width="medium",
+            ),
+        },
     )
-    
+
     # Safely convert to DataFrame
     if not isinstance(editable_tankers, pd.DataFrame):
         if isinstance(editable_tankers, dict):
             # Handle the dictionary properly
-            if 'edited_rows' in editable_tankers:
+            if "edited_rows" in editable_tankers:
                 # Use the original data and apply edits
                 editable_tankers = tanker_df.copy()
             else:
                 # Convert dict to DataFrame more safely
                 try:
-                    editable_tankers = pd.DataFrame.from_dict(editable_tankers, orient='index').T
+                    editable_tankers = pd.DataFrame.from_dict(
+                        editable_tankers, orient="index"
+                    ).T
                 except:
                     editable_tankers = tanker_df.copy()
         else:
             editable_tankers = tanker_df.copy()
-    
+
     # Now safely apply the distance calculation
-    editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(compute_tanker_distance, axis=1)
+    editable_tankers["Distance to Fire (nm)"] = editable_tankers.apply(
+        compute_tanker_distance, axis=1
+    )
 st.markdown("---")
 
 # --------------------------
@@ -411,17 +472,23 @@ valid_tankers["coords"] = valid_tankers["Airport"].apply(get_airport_coords)
 valid_tankers = valid_tankers.dropna(subset=["coords"])
 valid_tankers["LAT"] = valid_tankers["coords"].apply(lambda x: x[0])
 valid_tankers["LON"] = valid_tankers["coords"].apply(lambda x: x[1])
-valid_tankers["icon_data"] = [{
-    "url": f"data:image/png;base64,{encode_image_to_base64('plane.png')}",
-    "width": 64,
-    "height": 64,
-    "anchorY": 64
-}] * len(valid_tankers)
+valid_tankers["icon_data"] = [
+    {
+        "url": f"data:image/png;base64,{encode_image_to_base64('plane.png')}",
+        "width": 64,
+        "height": 64,
+        "anchorY": 64,
+    }
+] * len(valid_tankers)
 
 # Add offset to tanker icons for multiple tankers at same airport
-valid_tankers['offset_index'] = valid_tankers.groupby('Airport').cumcount()
-valid_tankers['LAT_offset'] = valid_tankers['LAT'] + (valid_tankers['offset_index'] * 0.01)
-valid_tankers['LON_offset'] = valid_tankers['LON'] + (valid_tankers['offset_index'] * 0.01)
+valid_tankers["offset_index"] = valid_tankers.groupby("Airport").cumcount()
+valid_tankers["LAT_offset"] = valid_tankers["LAT"] + (
+    valid_tankers["offset_index"] * 0.01
+)
+valid_tankers["LON_offset"] = valid_tankers["LON"] + (
+    valid_tankers["offset_index"] * 0.01
+)
 
 tanker_layer = pdk.Layer(
     "IconLayer",
@@ -430,53 +497,65 @@ tanker_layer = pdk.Layer(
     get_position="[LON_offset, LAT_offset]",
     get_size=4,
     size_scale=10,
-    pickable=True
+    pickable=True,
 )
 
 # ADD TANKER LABELS with offset for multiple tankers at same airport
 tanker_label_data = valid_tankers.copy()
-tanker_label_data["label_text"] = tanker_label_data["Tanker Number"] + "\n" + tanker_label_data["Airport"]
+tanker_label_data["label_text"] = (
+    tanker_label_data["Tanker Number"] + "\n" + tanker_label_data["Airport"]
+)
 
 # Add offset for multiple tankers at same airport
 offset_factor = 0.01  # Adjust this to control spacing
-tanker_label_data['offset_index'] = tanker_label_data.groupby('Airport').cumcount()
-tanker_label_data['LAT_offset'] = tanker_label_data['LAT'] + (tanker_label_data['offset_index'] * offset_factor)
-tanker_label_data['LON_offset'] = tanker_label_data['LON'] + (tanker_label_data['offset_index'] * offset_factor)
+tanker_label_data["offset_index"] = tanker_label_data.groupby("Airport").cumcount()
+tanker_label_data["LAT_offset"] = tanker_label_data["LAT"] + (
+    tanker_label_data["offset_index"] * offset_factor
+)
+tanker_label_data["LON_offset"] = tanker_label_data["LON"] + (
+    tanker_label_data["offset_index"] * offset_factor
+)
 
 # Background text layer for tankers (black shadow)
-tanker_text_bg_layer = pdk.Layer("TextLayer", 
-                                 data=tanker_label_data,
-                                 get_position="[LON_offset, LAT_offset]", 
-                                 get_text="label_text",
-                                 get_size=14,
-                                 get_color=[0, 0, 0, 200],  # Black shadow
-                                 get_alignment_baseline="'top'",
-                                 get_text_anchor="'middle'",
-                                 billboard=True)
+tanker_text_bg_layer = pdk.Layer(
+    "TextLayer",
+    data=tanker_label_data,
+    get_position="[LON_offset, LAT_offset]",
+    get_text="label_text",
+    get_size=14,
+    get_color=[0, 0, 0, 200],  # Black shadow
+    get_alignment_baseline="'top'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
 # Main text layer for tankers (yellow text for visibility)
-tanker_text_layer = pdk.Layer("TextLayer", 
-                              data=tanker_label_data,
-                              get_position="[LON_offset, LAT_offset]", 
-                              get_text="label_text",
-                              get_size=14,
-                              get_color=[255, 255, 0, 255],  # Yellow text
-                              get_alignment_baseline="'top'",
-                              get_text_anchor="'middle'",
-                              billboard=True)
+tanker_text_layer = pdk.Layer(
+    "TextLayer",
+    data=tanker_label_data,
+    get_position="[LON_offset, LAT_offset]",
+    get_text="label_text",
+    get_size=14,
+    get_color=[255, 255, 0, 255],  # Yellow text
+    get_alignment_baseline="'top'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
 # --------------------------
 # Map Layers Setup
 # --------------------------
 line_data = []
 for _, row in closest_bases.iterrows():
-    line_data.append({
-        "start": [lon, lat],  # Fire location
-        "end": [row["LON"], row["LAT"]]  # Base location
-    })
+    line_data.append(
+        {
+            "start": [lon, lat],  # Fire location
+            "end": [row["LON"], row["LAT"]],  # Base location
+        }
+    )
 
 line_layer = pdk.Layer(
-    "LineLayer", 
+    "LineLayer",
     data=pd.DataFrame(line_data),
     get_source_position="start",
     get_target_position="end",
@@ -486,81 +565,123 @@ line_layer = pdk.Layer(
     # Add dashed line properties
     line_width_min_pixels=2,
     line_width_max_pixels=5,
-    get_line_dash_array=[10, 5]  # This creates the dashed effect
+    get_line_dash_array=[10, 5],  # This creates the dashed effect
 )
 
-fire_icon_data = pd.DataFrame([{
-    "lat": lat, "lon": lon,
-    "icon_data": {
-        "url": f"data:image/png;base64,{encode_image_to_base64('flame.png')}",
-        "width": 64, "height": 64, "anchorY": 64
-    }
-}])
-fire_layer = pdk.Layer("IconLayer", data=fire_icon_data, get_icon="icon_data",
-                       get_size=4, size_scale=10, get_position="[lon, lat]", pickable=True)
+fire_icon_data = pd.DataFrame(
+    [
+        {
+            "lat": lat,
+            "lon": lon,
+            "icon_data": {
+                "url": f"data:image/png;base64,{encode_image_to_base64('flame.png')}",
+                "width": 64,
+                "height": 64,
+                "anchorY": 64,
+            },
+        }
+    ]
+)
+fire_layer = pdk.Layer(
+    "IconLayer",
+    data=fire_icon_data,
+    get_icon="icon_data",
+    get_size=4,
+    size_scale=10,
+    get_position="[lon, lat]",
+    pickable=True,
+)
 
 airport_icon_data = closest_bases.copy()
-airport_icon_data["icon_data"] = [{
-    "url": f"data:image/png;base64,{encode_image_to_base64('location.png')}",
-    "width": 128,
-    "height": 128,
-    "anchorY": 128
-}] * len(closest_bases)
-airport_layer = pdk.Layer("IconLayer", data=airport_icon_data, get_icon="icon_data",
-                          get_size=4, size_scale=10, get_position="[LON, LAT]", pickable=True)
+airport_icon_data["icon_data"] = [
+    {
+        "url": f"data:image/png;base64,{encode_image_to_base64('location.png')}",
+        "width": 128,
+        "height": 128,
+        "anchorY": 128,
+    }
+] * len(closest_bases)
+airport_layer = pdk.Layer(
+    "IconLayer",
+    data=airport_icon_data,
+    get_icon="icon_data",
+    get_size=4,
+    size_scale=10,
+    get_position="[LON, LAT]",
+    pickable=True,
+)
 
 # ADD AIRPORT LABELS for closest bases
 airport_label_data = closest_bases.copy()
-airport_label_data["label_text"] = airport_label_data["ICAO"] + "\n" + airport_label_data["Name"]
+airport_label_data["label_text"] = (
+    airport_label_data["ICAO"]
+    + "\n"
+    + airport_label_data["Name"]
+    + "\n"
+    + airport_label_data["State"]
+)
 
 # Background text layer for airports (black shadow)
-airport_text_bg_layer = pdk.Layer("TextLayer", 
-                                  data=airport_label_data,
-                                  get_position="[LON, LAT]", 
-                                  get_text="label_text",
-                                  get_size=16,
-                                  get_color=[0, 0, 0, 200],  # Black shadow
-                                  get_alignment_baseline="'top'",
-                                  get_text_anchor="'middle'",
-                                  billboard=True)
+airport_text_bg_layer = pdk.Layer(
+    "TextLayer",
+    data=airport_label_data,
+    get_position="[LON, LAT]",
+    get_text="label_text",
+    get_size=16,
+    get_color=[0, 0, 0, 200],  # Black shadow
+    get_alignment_baseline="'top'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
 # Main text layer for airports (black text)
-airport_text_layer = pdk.Layer("TextLayer", 
-                               data=airport_label_data,
-                               get_position="[LON, LAT]", 
-                               get_text="label_text",
-                               get_size=16,
-                               get_color=[0, 0, 0, 255],  # Black text
-                               get_alignment_baseline="'top'",
-                               get_text_anchor="'middle'",
-                               billboard=True)
+airport_text_layer = pdk.Layer(
+    "TextLayer",
+    data=airport_label_data,
+    get_position="[LON, LAT]",
+    get_text="label_text",
+    get_size=16,
+    get_color=[0, 0, 0, 255],  # Black text
+    get_alignment_baseline="'top'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
-label_data = pd.DataFrame([{
-    "lat": (lat + row["LAT"]) / 2,
-    "lon": (lon + row["LON"]) / 2,
-    "text": f"{row['Distance to Fire (nm)']:.0f}nm"
-} for _, row in closest_bases.iterrows()])
+label_data = pd.DataFrame(
+    [
+        {
+            "lat": (lat + row["LAT"]) / 2,
+            "lon": (lon + row["LON"]) / 2,
+            "text": f"{row['Distance to Fire (nm)']:.0f}nm",
+        }
+        for _, row in closest_bases.iterrows()
+    ]
+)
 # Background text layer (black shadow effect)
-text_background_layer = pdk.Layer("TextLayer", data=label_data,
-                                  get_position="[lon, lat]", get_text="text",
-                                  get_size=20,
-                                  get_color=[0, 0, 0, 180],  # Semi-transparent black
-                                  get_alignment_baseline="'bottom'",
-                                  get_text_anchor="'middle'",
-                                  billboard=True)
+text_background_layer = pdk.Layer(
+    "TextLayer",
+    data=label_data,
+    get_position="[lon, lat]",
+    get_text="text",
+    get_size=20,
+    get_color=[0, 0, 0, 180],  # Semi-transparent black
+    get_alignment_baseline="'bottom'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
 # Main text layer (white text)
-text_layer = pdk.Layer("TextLayer", data=label_data,
-                       get_position="[lon, lat]", get_text="text",
-                       get_size=20,
-                       get_color=[255, 255, 255, 255],  # Solid white
-                       get_alignment_baseline="'bottom'",
-                       get_text_anchor="'middle'",
-                       billboard=True)
-
-
-
-
+text_layer = pdk.Layer(
+    "TextLayer",
+    data=label_data,
+    get_position="[lon, lat]",
+    get_text="text",
+    get_size=20,
+    get_color=[255, 255, 255, 255],  # Solid white
+    get_alignment_baseline="'bottom'",
+    get_text_anchor="'middle'",
+    billboard=True,
+)
 
 
 # --------------------------
@@ -570,31 +691,29 @@ with map_placeholder:
     st.markdown("### 🗺️ Real-Time Wildfire Response Map")
     with st.spinner("🗺️ Loading interactive map..."):
         st.markdown('<div class="map-container">', unsafe_allow_html=True)
-        st.pydeck_chart(pdk.Deck(
-            map_style="mapbox://styles/mapbox/satellite-streets-v11",
-            initial_view_state=pdk.ViewState(
-                latitude=lat, 
-                longitude=lon, 
-                zoom=7,
-                pitch=45,
-                bearing=0
-            ),
-            layers=[
-                line_layer, 
-                fire_layer, 
-                airport_layer, 
-                airport_text_bg_layer,  # NEW
-                airport_text_layer,     # NEW
-                tanker_layer,
-                tanker_text_bg_layer,   # NEW
-                tanker_text_layer,      # NEW
-                text_background_layer,  # Distance labels
-                text_layer              # Distance labels
-            ],
-            api_keys={"mapbox": pdk.settings.mapbox_api_key},
-            height=600
-        ))
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.pydeck_chart(
+            pdk.Deck(
+                map_style="mapbox://styles/mapbox/satellite-streets-v11",
+                initial_view_state=pdk.ViewState(
+                    latitude=lat, longitude=lon, zoom=7, pitch=45, bearing=0
+                ),
+                layers=[
+                    line_layer,
+                    fire_layer,
+                    airport_layer,
+                    airport_text_bg_layer,  # NEW
+                    airport_text_layer,  # NEW
+                    tanker_layer,
+                    tanker_text_bg_layer,  # NEW
+                    tanker_text_layer,  # NEW
+                    text_background_layer,  # Distance labels
+                    text_layer,  # Distance labels
+                ],
+                api_keys={"mapbox": pdk.settings.mapbox_api_key},
+                height=600,
+            )
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # --------------------------
     # Closest Bases Summary
@@ -604,40 +723,66 @@ with map_placeholder:
 
     # Enhanced dataframe display
     st.dataframe(
-        closest_bases[["Name", "ICAO", "LAT", "LON", "Elevation", "# of Runways", "Distance to Fire (nm)"]],
+        closest_bases[
+            [
+                "Name",
+                "ICAO",
+                "Region",
+                "State",
+                "LAT",
+                "LON",
+                "Distance to Fire (nm)",
+            ]
+        ],
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        column_config={
+            "Name": st.column_config.TextColumn("🏢 Base Name", width="medium"),
+            "ICAO": st.column_config.TextColumn("🛩️ ICAO", width="small"),
+            "Region": st.column_config.TextColumn("🌍 Region", width="small"),
+            "State": st.column_config.TextColumn("🗺️ State", width="small"),
+            "LAT": st.column_config.NumberColumn("📍 Latitude", format="%.4f"),
+            "LON": st.column_config.NumberColumn("📍 Longitude", format="%.4f"),
+            "Distance to Fire (nm)": st.column_config.NumberColumn(
+                "🎯 Distance (nm)", format="%.1f"
+            ),
+        },
     )
 
 
 # Map controls info
-st.markdown("""
+st.markdown(
+    """
 <div style="text-align: center; margin: 15px 0; color: #666;">
     <small>🖱️ <strong>Map Controls:</strong> Click and drag to pan • Scroll to zoom • Hold Shift + drag to rotate</small>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 st.markdown("### 📊 Air Tankers with Calculated Distances")
 st.markdown("*Real-time distance calculations from current fire location*")
 
 # Enhanced results display
 st.dataframe(
-    editable_tankers, 
+    editable_tankers,
     use_container_width=True,
     hide_index=True,
     column_config={
         "Distance to Fire (nm)": st.column_config.NumberColumn(
             "🎯 Distance (nm)",
             help="Distance from aircraft to fire location in nautical miles",
-            format="%.1f"
+            format="%.1f",
         )
-    }
+    },
 )
 
 # --------------------------
 # Optional Date Comparison Logic
 # --------------------------
 today = datetime.date.today()
+
+
 def row_has_today_date(row_date):
     if isinstance(row_date, datetime.datetime):
         row_date = row_date.date()
